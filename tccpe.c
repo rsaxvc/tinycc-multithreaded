@@ -619,7 +619,7 @@ static int pe_write(struct pe_info *pe)
 
     pf.op = fopen(pe->filename, "wb");
     if (NULL == pf.op) {
-        tcc_error_noabort("could not write '%s': %s", pe->filename, strerror(errno));
+        tcc_error_noabort(s1, "could not write '%s': %s", pe->filename, strerror(errno));
         return -1;
     }
 
@@ -773,29 +773,29 @@ static struct import_symbol *pe_add_import(struct pe_info *pe, int sym_index)
         p = pe->imp_info[i];
         goto found_dll;
     }
-    p = tcc_mallocz(sizeof *p);
+    p = tcc_mallocz(pe->s1, sizeof *p);
     p->dll_index = dll_index;
-    dynarray_add(&pe->imp_info, &pe->imp_count, p);
+    dynarray_add(pe->s1, &pe->imp_info, &pe->imp_count, p);
 
 found_dll:
     i = dynarray_assoc ((void**)p->symbols, p->sym_count, sym_index);
     if (-1 != i)
         return p->symbols[i];
 
-    s = tcc_mallocz(sizeof *s);
-    dynarray_add(&p->symbols, &p->sym_count, s);
+    s = tcc_mallocz(pe->s1, sizeof *s);
+    dynarray_add(pe->s1, &p->symbols, &p->sym_count, s);
     s->sym_index = sym_index;
     return s;
 }
 
-void pe_free_imports(struct pe_info *pe)
+static void pe_free_imports(TCCState *s1, struct pe_info *pe)
 {
     int i;
     for (i = 0; i < pe->imp_count; ++i) {
         struct pe_import_info *p = pe->imp_info[i];
-        dynarray_reset(&p->symbols, &p->sym_count);
+        dynarray_reset(s1, &p->symbols, &p->sym_count);
     }
-    dynarray_reset(&pe->imp_info, &pe->imp_count);
+    dynarray_reset(s1, &pe->imp_info, &pe->imp_count);
 }
 
 /*----------------------------------------------------------------------------*/
@@ -868,7 +868,7 @@ static void pe_build_imports(struct pe_info *pe)
                         v = (ADDR3264)GetProcAddress(dllref->handle, ordinal?(char*)0+ordinal:name);
                     }
                     if (!v)
-                        tcc_error_noabort("could not resolve symbol '%s'", name);
+                        tcc_error_noabort(s1, "could not resolve symbol '%s'", name);
                 } else
 #endif
                 if (ordinal) {
@@ -930,10 +930,10 @@ static void pe_build_exports(struct pe_info *pe)
         sym = (ElfW(Sym)*)symtab_section->data + sym_index;
         name = pe_export_name(pe->s1, sym);
         if (sym->st_other & ST_PE_EXPORT) {
-            p = tcc_malloc(sizeof *p);
+            p = tcc_malloc(s1, sizeof *p);
             p->index = sym_index;
             p->name = name;
-            dynarray_add(&sorted, &sym_count, p);
+            dynarray_add(s1, &sorted, &sym_count, p);
         }
 #if 0
         if (sym->st_other & ST_PE_EXPORT)
@@ -974,7 +974,7 @@ static void pe_build_exports(struct pe_info *pe)
     strcpy(tcc_fileextension(buf), ".def");
     op = fopen(buf, "wb");
     if (NULL == op) {
-        tcc_error_noabort("could not create '%s': %s", buf, strerror(errno));
+        tcc_error_noabort(s1, "could not create '%s': %s", buf, strerror(errno));
     } else {
         fprintf(op, "LIBRARY %s\n\nEXPORTS\n", dllname);
         if (pe->s1->verbose)
@@ -1002,7 +1002,7 @@ static void pe_build_exports(struct pe_info *pe)
 
     pe->exp_offs = base_o + rva_base;
     pe->exp_size = pe->thunk->data_offset - base_o;
-    dynarray_reset(&sorted, &sym_count);
+    dynarray_reset(s1, &sorted, &sym_count);
     if (op)
         fclose(op);
 }
@@ -1116,7 +1116,7 @@ static int pe_assign_addresses (struct pe_info *pe)
         pe->reloc = new_section(pe->s1, ".reloc", SHT_PROGBITS, 0);
     // pe->thunk = new_section(pe->s1, ".iedat", SHT_PROGBITS, SHF_ALLOC);
 
-    section_order = tcc_malloc(pe->s1->nb_sections * sizeof (int));
+    section_order = tcc_malloc(s1, pe->s1->nb_sections * sizeof (int));
     for (o = k = 0 ; k < sec_last; ++k) {
         for (i = 1; i < s1->nb_sections; ++i) {
             s = s1->sections[i];
@@ -1164,8 +1164,8 @@ static int pe_assign_addresses (struct pe_info *pe)
         if (si)
             goto add_section;
 
-        si = tcc_mallocz(sizeof *si);
-        dynarray_add(&pe->sec_info, &pe->sec_count, si);
+        si = tcc_mallocz(s1, sizeof *si);
+        dynarray_add(s1, &pe->sec_info, &pe->sec_count, si);
 
         strcpy(si->name, s->name);
         si->cls = c;
@@ -1195,7 +1195,7 @@ add_section:
         }
         //printf("%08x %05x %08x %s\n", si->sh_addr, si->sh_size, si->pe_flags, s->name);
     }
-    tcc_free(section_order);
+    tcc_free(s1, section_order);
 #if 0
     for (i = 1; i < s1->nb_sections; ++i) {
         Section *s = s1->sections[i];
@@ -1336,7 +1336,7 @@ static int pe_check_symbols(struct pe_info *pe)
             if (ELFW(ST_BIND)(sym->st_info) == STB_WEAK)
                 /* STB_WEAK undefined symbols are accepted */
                 continue;
-            tcc_error_noabort("undefined symbol '%s'%s", name,
+            tcc_error_noabort(s1, "undefined symbol '%s'%s", name,
                 imp_sym < 0 ? ", missing __declspec(dllimport)?":"");
             ret = -1;
 
@@ -1492,7 +1492,7 @@ static void pe_print_sections(TCCState *s1, const char *fname)
 /* helper function for load/store to insert one more indirection */
 
 #if defined TCC_TARGET_I386 || defined TCC_TARGET_X86_64
-ST_FUNC SValue *pe_getimport(SValue *sv, SValue *v2)
+ST_FUNC SValue *pe_getimport(TCCState *s1, SValue *sv, SValue *v2)
 {
     int r2;
     if ((sv->r & (VT_VALMASK|VT_SYM)) != (VT_CONST|VT_SYM) || (sv->r2 != VT_CONST))
@@ -1505,14 +1505,14 @@ ST_FUNC SValue *pe_getimport(SValue *sv, SValue *v2)
     v2->r = VT_CONST | VT_SYM | VT_LVAL;
     v2->sym = sv->sym;
 
-    r2 = get_reg(RC_INT);
-    load(r2, v2);
+    r2 = get_reg(s1, RC_INT);
+    load(s1, r2, v2);
     v2->r = r2;
     if ((uint32_t)sv->c.i) {
-        vpushv(v2);
-        vpushi(sv->c.i);
-        gen_opi('+');
-        *v2 = *vtop--;
+        vpushv(s1, v2);
+        vpushi(s1, sv->c.i);
+        gen_opi(s1, '+');
+        *v2 = *s1->vtop--;
     }
     v2->type.t = sv->type.t;
     v2->r |= sv->r & VT_LVAL;
@@ -1553,7 +1553,7 @@ static int read_mem(int fd, unsigned offset, void *buffer, unsigned len)
 
 /* ------------------------------------------------------------- */
 
-PUB_FUNC int tcc_get_dllexports(const char *filename, char **pp)
+PUB_FUNC int tcc_get_dllexports(TCCState *s1, const char *filename, char **pp)
 {
     int l, i, n, n0, ret;
     char *p;
@@ -1626,9 +1626,9 @@ found:
         namep += sizeof ptr;
         for (l = 0;;) {
             if (n+1 >= n0)
-                p = tcc_realloc(p, n0 = n0 ? n0 * 2 : 256);
+                p = tcc_realloc(s1, p, n0 = n0 ? n0 * 2 : 256);
             if (!read_mem(fd, ptr - ref + l++, p + n, 1)) {
-                tcc_free(p), p = NULL;
+                tcc_free(s1, p), p = NULL;
                 goto the_end;
             }
             if (p[n++] == 0)
@@ -1768,14 +1768,14 @@ static int pe_load_dll(TCCState *s1, const char *filename)
     char *p, *q;
     int index, ret;
 
-    ret = tcc_get_dllexports(filename, &p);
+    ret = tcc_get_dllexports(s1, filename, &p);
     if (ret) {
         return -1;
     } else if (p) {
         index = pe_add_dllref(s1, filename);
         for (q = p; *q; q += 1 + strlen(q))
             pe_putimport(s1, index, q, 0);
-        tcc_free(p);
+        tcc_free(s1, p);
     }
     return 0;
 }
@@ -1829,9 +1829,8 @@ static unsigned pe_add_uwwind_info(TCCState *s1)
     return s1->uw_offs;
 }
 
-ST_FUNC void pe_add_unwind_data(unsigned start, unsigned end, unsigned stack)
+ST_FUNC void pe_add_unwind_data(TCCState *s1, unsigned start, unsigned end, unsigned stack)
 {
-    TCCState *s1 = tcc_state;
     Section *pd;
     unsigned o, n, d;
     struct /* _RUNTIME_FUNCTION */ {
@@ -1865,7 +1864,7 @@ ST_FUNC void pe_add_unwind_data(unsigned start, unsigned end, unsigned stack)
 static void tcc_add_support(TCCState *s1, const char *filename)
 {
     if (tcc_add_dll(s1, filename, 0) < 0)
-        tcc_error_noabort("%s not found", filename);
+        tcc_error_noabort(s1, "%s not found", filename);
 }
 
 static void pe_add_runtime(TCCState *s1, struct pe_info *pe)
@@ -2029,7 +2028,7 @@ ST_FUNC int pe_output_file(TCCState *s1, const char *filename)
             ret = -1;
         else
             ret = pe_write(&pe);
-        dynarray_reset(&pe.sec_info, &pe.sec_count);
+        dynarray_reset(s1, &pe.sec_info, &pe.sec_count);
     } else {
 #ifdef TCC_IS_NATIVE
         pe.thunk = data_section;
@@ -2041,7 +2040,7 @@ ST_FUNC int pe_output_file(TCCState *s1, const char *filename)
 #endif
     }
 
-    pe_free_imports(&pe);
+    pe_free_imports(s1, &pe);
 
 #if PE_PRINT_SECTIONS
     if (s1->g_debug & 8)

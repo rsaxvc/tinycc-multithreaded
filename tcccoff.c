@@ -514,7 +514,7 @@ ST_FUNC int tcc_output_coff(TCCState *s1, FILE *f)
 	int nstr;
 	int n = 0;
 
-	Coff_str_table = (char *) tcc_malloc(MAX_STR_TABLE);
+	Coff_str_table = (char *) tcc_malloc(s1, MAX_STR_TABLE);
 	pCoff_str_table = Coff_str_table;
 	nstr = 0;
 
@@ -533,7 +533,7 @@ ST_FUNC int tcc_output_coff(TCCState *s1, FILE *f)
 	    } else {
 		if (pCoff_str_table - Coff_str_table + strlen(name) >
 		    MAX_STR_TABLE - 1)
-		    tcc_error("String table too large");
+		    tcc_error(s1, "String table too large");
 
 		csym._n._n_n._n_zeroes = 0;
 		csym._n._n_n._n_offset =
@@ -563,7 +563,7 @@ ST_FUNC int tcc_output_coff(TCCState *s1, FILE *f)
 		}
 
 		if (k >= nFuncs) {
-		    tcc_error("debug info can't find function: %s", name);
+		    tcc_error(s1, "debug info can't find function: %s", name);
 		}
 		// put a Function Name
 
@@ -679,7 +679,7 @@ ST_FUNC int tcc_output_coff(TCCState *s1, FILE *f)
 	// then write the strings
 	fwrite(Coff_str_table, i, 1, f);
 
-	tcc_free(Coff_str_table);
+	tcc_free(s1, Coff_str_table);
     }
 
     return 0;
@@ -696,7 +696,7 @@ void SortSymbolTable(TCCState *s1)
     Elf32_Sym *p, *p2, *NewTable;
     char *name, *name2;
 
-    NewTable = (Elf32_Sym *) tcc_malloc(nb_syms * sizeof(Elf32_Sym));
+    NewTable = (Elf32_Sym *) tcc_malloc(s1, nb_syms * sizeof(Elf32_Sym));
 
     p = (Elf32_Sym *) symtab_section->data;
 
@@ -730,7 +730,7 @@ void SortSymbolTable(TCCState *s1)
 		    }
 
 		    if (k >= nFuncs) {
-                        tcc_error("debug (sort) info can't find function: %s", name2);
+                        tcc_error(s1, "debug (sort) info can't find function: %s", name2);
 		    }
 
 		    if (strcmp(AssociatedFile[k], name) == 0) {
@@ -757,7 +757,7 @@ void SortSymbolTable(TCCState *s1)
     }
 
     if (n != nb_syms)
-	tcc_error("Internal Compiler error, debug info");
+	tcc_error(s1, "Internal Compiler error, debug info");
 
     // copy it all back
 
@@ -766,7 +766,7 @@ void SortSymbolTable(TCCState *s1)
 	*p++ = NewTable[i];
     }
 
-    tcc_free(NewTable);
+    tcc_free(s1, NewTable);
 }
 
 
@@ -854,7 +854,7 @@ Section *FindSection(TCCState * s1, const char *sname)
 	    return s;
     }
 
-    tcc_error("could not find section %s", sname);
+    tcc_error(s1, "could not find section %s", sname);
     return 0;
 }
 
@@ -872,39 +872,39 @@ ST_FUNC int tcc_load_coff(TCCState * s1, int fd)
 
     f = fdopen(fd, "rb");
     if (!f) {
-	tcc_error("Unable to open .out file for input");
+	tcc_error(s1, "Unable to open .out file for input");
     }
 
     if (fread(&file_hdr, FILHSZ, 1, f) != 1)
-	tcc_error("error reading .out file for input");
+	tcc_error(s1, "error reading .out file for input");
 
     if (fread(&o_filehdr, sizeof(o_filehdr), 1, f) != 1)
-	tcc_error("error reading .out file for input");
+	tcc_error(s1, "error reading .out file for input");
 
     // first read the string table
 
     if (fseek(f, file_hdr.f_symptr + file_hdr.f_nsyms * SYMESZ, SEEK_SET))
-	tcc_error("error reading .out file for input");
+	tcc_error(s1, "error reading .out file for input");
 
     if (fread(&str_size, sizeof(int), 1, f) != 1)
-	tcc_error("error reading .out file for input");
+	tcc_error(s1, "error reading .out file for input");
 
 
-    Coff_str_table = (char *) tcc_malloc(str_size);
+    Coff_str_table = (char *) tcc_malloc(s1, str_size);
 
     if (fread(Coff_str_table, str_size - 4, 1, f) != 1)
-	tcc_error("error reading .out file for input");
+	tcc_error(s1, "error reading .out file for input");
 
     // read/process all the symbols
 
     // seek back to symbols
 
     if (fseek(f, file_hdr.f_symptr, SEEK_SET))
-	tcc_error("error reading .out file for input");
+	tcc_error(s1, "error reading .out file for input");
 
     for (i = 0; i < file_hdr.f_nsyms; i++) {
 	if (fread(&csym, SYMESZ, 1, f) != 1)
-	    tcc_error("error reading .out file for input");
+	    tcc_error(s1, "error reading .out file for input");
 
 	if (csym._n._n_n._n_zeroes == 0) {
 	    name = Coff_str_table + csym._n._n_n._n_offset - 4;
@@ -939,7 +939,7 @@ ST_FUNC int tcc_load_coff(TCCState * s1, int fd)
 
 	if (csym.n_numaux == 1) {
 	    if (fread(&csym, SYMESZ, 1, f) != 1)
-		tcc_error("error reading .out file for input");
+		tcc_error(s1, "error reading .out file for input");
 	    i++;
 	}
     }

@@ -93,17 +93,17 @@ LIBTCCAPI int tcc_relocate(TCCState *s1, void *ptr)
     /* mmap RX memory at a fixed distance */
     prx = mmap((char*)ptr + size, size, PROT_READ|PROT_EXEC, MAP_SHARED|MAP_FIXED, fd, 0);
     if (ptr == MAP_FAILED || prx == MAP_FAILED)
-	tcc_error("tccrun: could not map memory");
+	tcc_error(s1, "tccrun: could not map memory");
     ptr_diff = (char*)prx - (char*)ptr;
     close(fd);
     //printf("map %p %p %p\n", ptr, prx, (void*)ptr_diff);
 }
 #else
-    ptr = tcc_malloc(size);
+    ptr = tcc_malloc(s1, size);
 #endif
     tcc_relocate_ex(s1, ptr, ptr_diff); /* no more errors expected */
-    dynarray_add(&s1->runtime_mem, &s1->nb_runtime_mem, (void*)(addr_t)size);
-    dynarray_add(&s1->runtime_mem, &s1->nb_runtime_mem, ptr);
+    dynarray_add(s1, &s1->runtime_mem, &s1->nb_runtime_mem, (void*)(addr_t)size);
+    dynarray_add(s1, &s1->runtime_mem, &s1->nb_runtime_mem, ptr);
     return 0;
 }
 
@@ -122,10 +122,10 @@ ST_FUNC void tcc_run_free(TCCState *s1)
 #ifdef _WIN64
         win64_del_function_table(*(void**)ptr);
 #endif
-        tcc_free(ptr);
+        tcc_free(s1, ptr);
 #endif
     }
-    tcc_free(s1->runtime_mem);
+    tcc_free(s1, s1->runtime_mem);
 }
 
 static void run_cdtors(TCCState *s1, const char *start, const char *end,
@@ -185,7 +185,7 @@ LIBTCCAPI int tcc_run(TCCState *s1, int argc, char **argv)
             *(void**)p = _rt_error;
 #ifdef CONFIG_TCC_BCHECK
         if (s1->do_bounds_check) {
-            rc->bounds_start = (void*)bounds_section->sh_addr;
+            rc->bounds_start = (void*)lbounds_section->sh_addr;
             if ((p = tcc_get_symbol(s1, "__bound_init")))
                 ((void(*)(void*,int))p)(rc->bounds_start, 1);
         }
@@ -281,7 +281,7 @@ redo:
                     *(void**)mem = win64_add_function_table(s1);
 #endif
                 if (s->data) {
-                    tcc_free(s->data);
+                    tcc_free(s1, s->data);
                     s->data = NULL;
                     s->data_allocated = 0;
                 }
@@ -369,7 +369,7 @@ static void set_pages_executable(TCCState *s1, int mode, void *ptr, unsigned lon
     end = (addr_t)ptr + length;
     end = (end + PAGESIZE - 1) & ~(PAGESIZE - 1);
     if (mprotect((void *)start, end - start, protect[mode]))
-        tcc_error("mprotect failed: did you mean to configure --with-selinux?");
+        tcc_error(s1, "mprotect failed: did you mean to configure --with-selinux?");
 
 /* XXX: BSD sometimes dump core with bad system call */
 # if (TCC_TARGET_ARM && !TARGETOS_BSD) || TCC_TARGET_ARM64

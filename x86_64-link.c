@@ -243,7 +243,7 @@ void relocate(TCCState *s1, ElfW_Rel *rel, int type, unsigned char *ptr, addr_t 
             long long diff;
             diff = (long long)val - addr;
             if (diff < -2147483648LL || diff > 2147483647LL) {
-                tcc_error("internal error: relocation failed");
+                tcc_error(s1, "internal error: relocation failed");
             }
             add32le(ptr, diff);
         }
@@ -325,7 +325,7 @@ void relocate(TCCState *s1, ElfW_Rel *rel, int type, unsigned char *ptr, addr_t 
                     add32le(ptr + 8, x);
                 }
                 else
-                    tcc_error("unexpected R_X86_64_TLSGD pattern");
+                    tcc_error(s1, "unexpected R_X86_64_TLSGD pattern");
             }
             break;
         case R_X86_64_TLSLD:
@@ -345,7 +345,7 @@ void relocate(TCCState *s1, ElfW_Rel *rel, int type, unsigned char *ptr, addr_t 
                     rel[1].r_info = ELFW(R_INFO)(0, R_X86_64_NONE);
                 }
                 else
-                    tcc_error("unexpected R_X86_64_TLSLD pattern");
+                    tcc_error(s1, "unexpected R_X86_64_TLSLD pattern");
             }
             break;
         case R_X86_64_DTPOFF32:

@@ -225,7 +225,7 @@ void relocate(TCCState *s1, ElfW_Rel *rel, int type, unsigned char *ptr, addr_t 
         case R_386_16:
             if (s1->output_format != TCC_OUTPUT_FORMAT_BINARY) {
             output_file:
-                tcc_error("can only produce 16-bit binary files");
+                tcc_error(s1, "can only produce 16-bit binary files");
             }
             write16le(ptr, read16le(ptr) + val);
             return;
@@ -272,7 +272,7 @@ void relocate(TCCState *s1, ElfW_Rel *rel, int type, unsigned char *ptr, addr_t 
                     add32le(ptr + 5, -x);
                 }
                 else
-                    tcc_error("unexpected R_386_TLS_GD pattern");
+                    tcc_error(s1, "unexpected R_386_TLS_GD pattern");
             }
             return;
         case R_386_TLS_LDM:
@@ -295,7 +295,7 @@ void relocate(TCCState *s1, ElfW_Rel *rel, int type, unsigned char *ptr, addr_t 
                     rel[1].r_info = ELFW(R_INFO)(0, R_386_NONE);
                 }
                 else
-                    tcc_error("unexpected R_386_TLS_LDM pattern");
+                    tcc_error(s1, "unexpected R_386_TLS_LDM pattern");
             }
             return;
         case R_386_TLS_LDO_32:

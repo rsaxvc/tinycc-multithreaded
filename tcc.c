@@ -248,7 +248,7 @@ static char *default_outputfile(TCCState *s, const char *first_file)
         strcpy(ext, ".o");
     else
         strcpy(buf, "a.out");
-    return tcc_strdup(buf);
+    return tcc_strdup(s, buf);
 }
 
 static unsigned getclock_ms(void)
@@ -308,19 +308,19 @@ redo:
         }
 
         if (s->nb_files == 0)
-            tcc_error("no input files\n");
+            tcc_error(s, "no input files\n");
 
         if (s->output_type == TCC_OUTPUT_PREPROCESS) {
             if (s->outfile && 0!=strcmp("-",s->outfile)) {
                 ppfp = fopen(s->outfile, "w");
                 if (!ppfp)
-                    tcc_error("could not write '%s'", s->outfile);
+                    tcc_error(s, "could not write '%s'", s->outfile);
             }
         } else if (s->output_type == TCC_OUTPUT_OBJ && !s->option_r) {
             if (s->nb_libraries)
-                tcc_error("cannot specify libraries with -c");
+                tcc_error(s, "cannot specify libraries with -c");
             if (s->nb_files > 1 && s->outfile)
-                tcc_error("cannot specify output file with -c many files");
+                tcc_error(s, "cannot specify output file with -c many files");
         }
 
         if (s->do_bench)

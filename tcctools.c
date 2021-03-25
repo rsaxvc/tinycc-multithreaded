@@ -135,7 +135,7 @@ ST_FUNC int tcc_tool_ar(TCCState *s1, int argc, char **argv)
     }
 
     funcmax = 250;
-    afpos = tcc_realloc(NULL, funcmax * sizeof *afpos); // 250 func
+    afpos = tcc_realloc(s1, NULL, funcmax * sizeof *afpos); // 250 func
     memcpy(&arhdro.ar_mode, "100666", 6);
 
     // i_obj = first input object file
@@ -155,7 +155,7 @@ ST_FUNC int tcc_tool_ar(TCCState *s1, int argc, char **argv)
         fseek(fi, 0, SEEK_END);
         fsize = ftell(fi);
         fseek(fi, 0, SEEK_SET);
-        buf = tcc_malloc(fsize + 1);
+        buf = tcc_malloc(s1, fsize + 1);
         fread(buf, fsize, 1, fi);
         fclose(fi);
 
@@ -203,12 +203,12 @@ ST_FUNC int tcc_tool_ar(TCCState *s1, int argc, char **argv)
                     )) {
                     //printf("symtab: %2Xh %4Xh %2Xh %s\n", sym->st_info, sym->st_size, sym->st_shndx, strtab + sym->st_name);
                     istrlen = strlen(strtab + sym->st_name)+1;
-                    anames = tcc_realloc(anames, strpos+istrlen);
+                    anames = tcc_realloc(s1, anames, strpos+istrlen);
                     strcpy(anames + strpos, strtab + sym->st_name);
                     strpos += istrlen;
                     if (++funccnt >= funcmax) {
                         funcmax += 250;
-                        afpos = tcc_realloc(afpos, funcmax * sizeof *afpos); // 250 func more
+                        afpos = tcc_realloc(s1, afpos, funcmax * sizeof *afpos); // 250 func more
                     }
                     afpos[funccnt] = fpos;
                 }
@@ -229,7 +229,7 @@ ST_FUNC int tcc_tool_ar(TCCState *s1, int argc, char **argv)
         memcpy(&arhdro.ar_size, stmp, 10);
         fwrite(&arhdro, sizeof(arhdro), 1, fo);
         fwrite(buf, fsize, 1, fo);
-        tcc_free(buf);
+        tcc_free(s1, buf);
         i_obj++;
         fpos += (fsize + sizeof(arhdro));
     }
@@ -253,16 +253,16 @@ ST_FUNC int tcc_tool_ar(TCCState *s1, int argc, char **argv)
     fseek(fo, 0, SEEK_END);
     fsize = ftell(fo);
     fseek(fo, 0, SEEK_SET);
-    buf = tcc_malloc(fsize + 1);
+    buf = tcc_malloc(s1, fsize + 1);
     fread(buf, fsize, 1, fo);
     fwrite(buf, fsize, 1, fh);
-    tcc_free(buf);
+    tcc_free(s1, buf);
     ret = 0;
 the_end:
     if (anames)
-        tcc_free(anames);
+        tcc_free(s1, anames);
     if (afpos)
-        tcc_free(afpos);
+        tcc_free(s1, afpos);
     if (fh)
         fclose(fh);
     if (fo)
@@ -353,7 +353,7 @@ usage:
     if (SearchPath(NULL, file, ".dll", sizeof path, path, NULL))
         file = path;
 #endif
-    ret = tcc_get_dllexports(file, &p);
+    ret = tcc_get_dllexports(s1, file, &p);
     if (ret || !p) {
         fprintf(stderr, "tcc: impdef: %s '%s'\n",
             ret == -1 ? "can't find file" :
@@ -388,7 +388,7 @@ the_end:
     /* cannot free memory received from tcc_get_dllexports
        if it came from a dll */
     /* if (p)
-        tcc_free(p); */
+        tcc_free(s1, p); */
     if (fp)
         fclose(fp);
     if (op)
@@ -425,14 +425,14 @@ the_end:
 
 ST_FUNC void tcc_tool_cross(TCCState *s1, char **argv, int option)
 {
-    tcc_error("-m%d not implemented.", option);
+    tcc_error(s1, "-m%d not implemented.", option);
 }
 
 #else
 #ifdef _WIN32
 #include <process.h>
 
-static char *str_replace(const char *str, const char *p, const char *r)
+static char *str_replace(TCCState *s1, const char *str, const char *p, const char *r)
 {
     const char *s, *s0;
     char *d, *d0;
@@ -441,7 +441,7 @@ static char *str_replace(const char *str, const char *p, const char *r)
     sl = strlen(str);
     pl = strlen(p);
     rl = strlen(r);
-    for (d0 = NULL;; d0 = tcc_malloc(sl + 1)) {
+    for (d0 = NULL;; d0 = tcc_malloc(s1, sl + 1)) {
         for (d = d0, s = str; s0 = s, s = strstr(s, p), s; s += pl) {
             if (d) {
                 memcpy(d, s0, sl = s - s0), d += sl;
@@ -456,20 +456,21 @@ static char *str_replace(const char *str, const char *p, const char *r)
     }
 }
 
-static int execvp_win32(const char *prog, char **argv)
+static int execvp_state(TCCState *s1, const char *prog, char **argv)
 {
     int ret; char **p;
     /* replace all " by \" */
     for (p = argv; *p; ++p)
         if (strchr(*p, '"'))
-            *p = str_replace(*p, "\"", "\\\"");
+            *p = str_replace(s1, *p, "\"", "\\\"");
     ret = _spawnvp(P_NOWAIT, prog, (const char *const*)argv);
     if (-1 == ret)
         return ret;
     _cwait(&ret, ret, WAIT_CHILD);
     exit(ret);
 }
-#define execvp execvp_win32
+#else
+	#define execvp_state(s1,prog,argv) execvp(prog,argv)
 #endif /* _WIN32 */
 
 ST_FUNC void tcc_tool_cross(TCCState *s1, char **argv, int target)
@@ -490,8 +491,8 @@ ST_FUNC void tcc_tool_cross(TCCState *s1, char **argv, int target)
         , prefix, a0, target == 64 ? "x86_64" : "i386");
 
     if (strcmp(a0, program))
-        execvp(argv[0] = program, argv);
-    tcc_error("could not run '%s'", program);
+        execvp_state(s1, argv[0] = program, argv);
+    tcc_error(s1, "could not run '%s'", program);
 }
 
 #endif /* TCC_TARGET_I386 && TCC_TARGET_X86_64 */
@@ -508,8 +509,8 @@ const int _dowildcard = 1;
 /* -------------------------------------------------------------- */
 /* generate xxx.d file */
 
-static char *escape_target_dep(const char *s) {
-    char *res = tcc_malloc(strlen(s) * 2 + 1);
+static char *escape_target_dep(TCCState *s1, const char *s) {
+    char *res = tcc_malloc(s1, strlen(s) * 2 + 1);
     int j;
     for (j = 0; *s; s++, j++) {
         if (is_space(*s)) {
@@ -540,15 +541,15 @@ ST_FUNC void gen_makedeps(TCCState *s1, const char *target, const char *filename
     /* XXX return err codes instead of error() ? */
     depout = fopen(filename, "w");
     if (!depout)
-        tcc_error("could not open '%s'", filename);
+        tcc_error(s1, "could not open '%s'", filename);
     fprintf(depout, "%s:", target);
     for (i = 0; i<s1->nb_target_deps; ++i) {
         for (k = 0; k < i; ++k)
             if (0 == strcmp(s1->target_deps[i], s1->target_deps[k]))
                 goto next;
-        escaped_target = escape_target_dep(s1->target_deps[i]);
+        escaped_target = escape_target_dep(s1, s1->target_deps[i]);
         fprintf(depout, " \\\n  %s", escaped_target);
-        tcc_free(escaped_target);
+        tcc_free(s1, escaped_target);
     next:;
     }
     fprintf(depout, "\n");
